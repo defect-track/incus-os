@@ -192,6 +192,14 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 		names = append(names, vlan.Name)
 	}
 
+	for _, wg := range networkCfg.Wireguard {
+		if slices.Contains(names, wg.Name) {
+			return errors.New("duplicate interface/bond/vlan name: " + wg.Name)
+		}
+
+		names = append(names, wg.Name)
+	}
+
 	// Some USB NICs have a default name of "enx<MAC>", which is 15 characters long.
 	// To work around this, strip the leading "enx" before validating network interfaces.
 	mangleUSBNICs(networkCfg)
@@ -283,6 +291,19 @@ func UpdateNetworkState(ctx context.Context, n *api.SystemNetwork) error {
 		rolesFound = append(rolesFound, v.Roles...)
 		n.State.Interfaces[v.Name] = vState
 	}
+
+
+	// State update for wireguard.
+//	for _, w := range n.Config.Wireguard {
+//		wState, err := getInterfaceState(ctx, "wireguard", w.Name, "", "", nil)
+//		if err != nil {
+//			return err
+//		}
+
+//		wState.Roles = w.Roles
+//		rolesFound = append(rolesFound, w.Roles...)
+//		n.State.Interfaces[w.Name] = wState
+//	}
 
 	// Ensure required roles exist.
 	if !slices.Contains(rolesFound, api.SystemNetworkInterfaceRoleManagement) || !slices.Contains(rolesFound, api.SystemNetworkInterfaceRoleCluster) {
@@ -1009,6 +1030,60 @@ Id=%d
 		})
 	}
 
+	// Create wireguard.
+	for _, w := range networkCfg.Wireguard{
+		mtuString := ""
+		if w.MTU != 0 {
+			mtuString = fmt.Sprintf("MTUBytes=%d", w.MTU)
+		}
+
+		listenPort := ""
+		if w.Port != 0 {
+			listenPort = fmt.Sprintf("ListenPort=%d", w.Port)	
+		}
+
+		cfgString := fmt.Sprintf(`[NetDev]
+Name=%s
+Kind=wireguard
+%s
+
+[WireGuard]
+PrivateKey=%s
+%s
+
+`, w.Name, mtuString, w.PrivateKey, listenPort)
+
+		for _, peer := range w.Peers {
+			var options strings.Builder
+			for _, addr := range peer.AllowedIPs {
+				_, _ = options.WriteString(fmt.Sprintf("AllowedIPs=%s\n", addr))
+			}
+
+			if peer.PresharedKey != "" {
+				_, _ = options.WriteString(fmt.Sprintf("PresharedKey=%s\n", peer.PresharedKey))
+			}
+
+			if peer.Endpoint != "" {
+				_, _ = options.WriteString(fmt.Sprintf("Endpoint=%s\n", peer.Endpoint))
+			}
+
+			if peer.PersistentKeepalive > 0 {
+				_, _ = options.WriteString(fmt.Sprintf("PersistentKeepalive=%d\n", peer.PersistentKeepalive))
+			}
+
+			cfgString += fmt.Sprintf(`[WireGuardPeer]
+PublicKey=%s
+%s
+
+`, peer.PublicKey, options.String())
+		}
+
+		ret = append(ret, networkdConfigFile{
+			Name:     fmt.Sprintf("13-%s.netdev", w.Name),
+			Contents: cfgString,
+		})
+	}
+
 	return ret
 }
 
@@ -1224,6 +1299,22 @@ UseMTU=true
 
 		ret = append(ret, networkdConfigFile{
 			Name:     fmt.Sprintf("22-%s.network", v.Name),
+			Contents: cfgString,
+		})
+	}
+
+	// Create network for each Wireguard.
+	for _, w := range networkCfg.Wireguard {
+		cfgString := fmt.Sprintf(`[Match]
+Name=%s
+
+[Network]
+`, w.Name)
+
+		cfgString += processAddresses(w.Addresses)
+
+		ret = append(ret, networkdConfigFile{
+			Name:     fmt.Sprintf("23-%s.network", w.Name),
 			Contents: cfgString,
 		})
 	}
@@ -1469,6 +1560,37 @@ func cleanupStaleDevices(ctx context.Context, oldCfg *api.SystemNetworkConfig, n
 
 		if !bytes.Equal(oldConfig, newConfig) {
 			deleteNetworkDevice(ctx, oldCfg.VLANs[oldIndex].Name)
+
+			continue
+		}
+	}
+
+	// Check for changed/deleted wireguard.
+	for oldIndex := range oldCfg.Wireguard {
+		newIndex := slices.IndexFunc(newCfg.Wireguard, func(v api.SystemNetworkWireguard) bool {
+			return oldCfg.Wireguard[oldIndex].Name == v.Name
+		})
+
+		// If not found, remove the existing wireguard (either deleted, or the device is now an interface or bond).
+		if newIndex < 0 {
+			deleteNetworkDevice(ctx, oldCfg.Wireguard[oldIndex].Name)
+
+			continue
+		}
+
+		// Check if the wireguard configuration has changed.
+		oldConfig, err := json.Marshal(oldCfg.Wireguard[oldIndex])
+		if err != nil {
+			return err
+		}
+
+		newConfig, err := json.Marshal(newCfg.Wireguard[newIndex])
+		if err != nil {
+			return err
+		}
+
+		if !bytes.Equal(oldConfig, newConfig) {
+			deleteNetworkDevice(ctx, oldCfg.Wireguard[oldIndex].Name)
 
 			continue
 		}

@@ -34,6 +34,7 @@ type SystemNetworkConfig struct {
 	Interfaces []SystemNetworkInterface `json:"interfaces,omitempty" yaml:"interfaces,omitempty"`
 	Bonds      []SystemNetworkBond      `json:"bonds,omitempty"      yaml:"bonds,omitempty"`
 	VLANs      []SystemNetworkVLAN      `json:"vlans,omitempty"      yaml:"vlans,omitempty"`
+	Wireguard  []SystemNetworkWireguard `json:"wireguard,omitempty"  yaml:"wireguard,omitempty"`
 }
 
 // SystemNetworkInterface contains information about a network interface.
@@ -77,6 +78,25 @@ type SystemNetworkVLAN struct {
 	Roles             []string             `json:"roles,omitempty"               yaml:"roles,omitempty"`
 }
 
+// SystemNetworkVLAN contains information about a network vlan.
+type SystemNetworkWireguard struct {
+	Name              string               `json:"name"                          yaml:"name"`
+	PrivateKey        string               `json:"private_key"                   yaml:"private_key"`
+	Port              int                  `json:"port,omitempty"                yaml:"port,omitempty"`
+	MTU               int                  `json:"mtu,omitempty"                 yaml:"mtu,omitempty"`
+	Addresses         []string             `json:"addresses,omitempty"           yaml:"addresses,omitempty"`
+	RequiredForOnline string               `json:"required_for_online,omitempty" yaml:"required_for_online,omitempty"`
+	Peers             []WireguardPeer      `json:"peers,omitempty"               yaml:"peers,omitempty"`
+}
+
+// SystemNetworkRoute defines a route.
+type WireguardPeer struct {
+	PublicKey           string               `json:"public_key"                     yaml:"public_key"`
+	PresharedKey        string               `json:"preshared_key,omitempty"        yaml:"preshared_key,omitempty"`
+	AllowedIPs          []string             `json:"allowed_ips"                    yaml:"allowed_ips"`
+	Endpoint            string               `json:"endpoint,omitempty"             yaml:"endpoint,omitempty"`
+	PersistentKeepalive int                  `json:"persistent_keepalive,omitempty" yaml:"persistent_keepalive,omitempty"`
+}
 // SystemNetworkRoute defines a route.
 type SystemNetworkRoute struct {
 	To  string `json:"to"  yaml:"to"`
