@@ -219,6 +219,11 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 		return err
 	}
 
+	err = validateWireguard(networkCfg)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -294,16 +299,16 @@ func UpdateNetworkState(ctx context.Context, n *api.SystemNetwork) error {
 
 
 	// State update for wireguard.
-//	for _, w := range n.Config.Wireguard {
-//		wState, err := getInterfaceState(ctx, "wireguard", w.Name, "", "", nil)
-//		if err != nil {
-//			return err
-//		}
+	for _, w := range n.Config.Wireguard {
+		wState, err := getWireguardState(ctx, "wireguard", w.Name, "", "", nil)
+		if err != nil {
+			return err
+		}
 
 //		wState.Roles = w.Roles
 //		rolesFound = append(rolesFound, w.Roles...)
-//		n.State.Interfaces[w.Name] = wState
-//	}
+		n.State.Interfaces[w.Name] = wState
+	}
 
 	// Ensure required roles exist.
 	if !slices.Contains(rolesFound, api.SystemNetworkInterfaceRoleManagement) || !slices.Contains(rolesFound, api.SystemNetworkInterfaceRoleCluster) {
@@ -369,6 +374,126 @@ func UpdateNetworkState(ctx context.Context, n *api.SystemNetwork) error {
 	}
 
 	return nil
+}
+
+// getInterfaceState runs various commands to gather network state for a specific interface.
+func getWireguardState(ctx context.Context, ifaceType string, iface string, hwaddr string, parent string, members map[string]api.SystemNetworkInterfaceState) (api.SystemNetworkInterfaceState, error) {
+	// Get IPs for the interface.
+	ips, err := GetIPAddresses(ctx, iface)
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	// Get routes for the interface.
+	routes := []api.SystemNetworkRoute{}
+	routeRegex := regexp.MustCompile(`(.+) via (.+) proto`)
+
+	output, err := subprocess.RunCommandContext(ctx, "ip", "route", "show", "dev", resolveBridge(iface))
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	for _, r := range routeRegex.FindAllStringSubmatch(output, -1) {
+		routes = append(routes, api.SystemNetworkRoute{
+			To:  r[1],
+			Via: r[2],
+		})
+	}
+
+	// Get various details from networkctl. It would be better to use the json output
+	// option, but that doesn't include everything we're interested in.
+	output, err = subprocess.RunCommandContext(ctx, "networkctl", "status", "-s", resolveBridge(iface))
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	interfaceStateRegex := regexp.MustCompile(`State: (.+?) `)
+
+	interfaceState := ""
+	if len(interfaceStateRegex.FindStringSubmatch(output)) == 2 {
+		interfaceState = interfaceStateRegex.FindStringSubmatch(output)[1]
+	}
+/*
+	localMACRegex := regexp.MustCompile(`  Hardware Address: (.+)`)
+
+	localMAC := ""
+	if len(localMACRegex.FindStringSubmatch(output)) == 2 {
+		localMAC = strings.Fields(localMACRegex.FindStringSubmatch(output)[1])[0]
+	}
+
+	remoteMACRegex := regexp.MustCompile(`Permanent Hardware Address: (.+)`)
+
+	remoteMAC := ""
+	if len(remoteMACRegex.FindStringSubmatch(output)) == 2 {
+		remoteMAC = strings.Fields(remoteMACRegex.FindStringSubmatch(output)[1])[0]
+	}
+*/
+	mtuRegex := regexp.MustCompile(`MTU: (.+?) `)
+
+	mtu, err := strconv.Atoi(mtuRegex.FindStringSubmatch(output)[1])
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	rxBytesRegex := regexp.MustCompile(`Rx Bytes: (.+)`)
+
+	rxBytes, err := strconv.Atoi(rxBytesRegex.FindStringSubmatch(output)[1])
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	txBytesRegex := regexp.MustCompile(`Tx Bytes: (.+)`)
+
+	txBytes, err := strconv.Atoi(txBytesRegex.FindStringSubmatch(output)[1])
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	rxErrorsRegex := regexp.MustCompile(`Rx Errors: (.+)`)
+
+	rxErrors, err := strconv.Atoi(rxErrorsRegex.FindStringSubmatch(output)[1])
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	txErrorsRegex := regexp.MustCompile(`Tx Errors: (.+)`)
+
+	txErrors, err := strconv.Atoi(txErrorsRegex.FindStringSubmatch(output)[1])
+	if err != nil {
+		return api.SystemNetworkInterfaceState{}, err
+	}
+
+	var speed string
+/*
+	if interfaceState != "off" {
+		// #nosec G304
+		contents, err := os.ReadFile("/sys/class/net/" + iface + "/speed")
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return api.SystemNetworkInterfaceState{}, err
+			}
+
+			speed = "unknown"
+		} else {
+			speed = strings.TrimSuffix(string(contents), "\n")
+		}
+	}
+*/
+	return api.SystemNetworkInterfaceState{
+		Type:      ifaceType,
+		Addresses: ips,
+		Hwaddr:    "",
+		Routes:    routes,
+		MTU:       mtu,
+		Speed:     speed,
+		State:     interfaceState,
+		Stats: api.SystemNetworkInterfaceStats{
+			RXBytes:  rxBytes,
+			TXBytes:  txBytes,
+			RXErrors: rxErrors,
+			TXErrors: txErrors,
+		},
+	}, nil
 }
 
 // getInterfaceState runs various commands to gather network state for a specific interface.
