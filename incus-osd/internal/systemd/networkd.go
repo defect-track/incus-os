@@ -177,7 +177,7 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 	names := []string{}
 	for _, iface := range networkCfg.Interfaces {
 		if slices.Contains(names, iface.Name) {
-			return errors.New("duplicate interface/bond/vlan name: " + iface.Name)
+			return errors.New("duplicate interface/bond/vlan/wg name: " + iface.Name)
 		}
 
 		names = append(names, iface.Name)
@@ -185,7 +185,7 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 
 	for _, bond := range networkCfg.Bonds {
 		if slices.Contains(names, bond.Name) {
-			return errors.New("duplicate interface/bond/vlan name: " + bond.Name)
+			return errors.New("duplicate interface/bond/vlan/wg name: " + bond.Name)
 		}
 
 		names = append(names, bond.Name)
@@ -193,7 +193,7 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 
 	for _, vlan := range networkCfg.VLANs {
 		if slices.Contains(names, vlan.Name) {
-			return errors.New("duplicate interface/bond/vlan name: " + vlan.Name)
+			return errors.New("duplicate interface/bond/vlan/wg name: " + vlan.Name)
 		}
 
 		names = append(names, vlan.Name)
@@ -201,7 +201,7 @@ func ValidateNetworkConfiguration(networkCfg *api.SystemNetworkConfig, requireVa
 
 	for _, wg := range networkCfg.Wireguard {
 		if slices.Contains(names, wg.Name) {
-			return errors.New("duplicate interface/bond/vlan name: " + wg.Name)
+			return errors.New("duplicate interface/bond/vlan/wg name: " + wg.Name)
 		}
 
 		names = append(names, wg.Name)
@@ -306,15 +306,15 @@ func UpdateNetworkState(ctx context.Context, n *api.SystemNetwork) error {
 
 
 	// State update for wireguard.
-	for _, w := range n.Config.Wireguard {
-		wState, err := getWireguardState(ctx, "wireguard", w.Name, "", "", nil)
+	for _, wg := range n.Config.Wireguard {
+		wgState, err := getWireguardState(ctx, "wireguard", wg.Name, "", "", nil)
 		if err != nil {
 			return err
 		}
 
-//		wState.Roles = w.Roles
-//		rolesFound = append(rolesFound, w.Roles...)
-		n.State.Interfaces[w.Name] = wState
+		wgState.Roles = wg.Roles
+		rolesFound = append(rolesFound, wg.Roles...)
+		n.State.Interfaces[wg.Name] = wgState
 	}
 
 	// Ensure required roles exist.

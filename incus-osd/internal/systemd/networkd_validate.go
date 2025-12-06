@@ -211,10 +211,15 @@ func validateWireguard(cfg *api.SystemNetworkConfig) error {
 			return fmt.Errorf("wireguard %d %s", index, err.Error())
 		}
 
-//		err = validateRoles(iface.Roles)
-//		if err != nil {
-//			return fmt.Errorf("interface %d %s", index, err.Error())
-//		}
+		err = validateRoles(wg.Roles)
+		if err != nil {
+			return fmt.Errorf("wireguard %d %s", index, err.Error())
+		}
+
+		err = validateFirewall(wg.FirewallRules)
+		if err != nil {
+			return fmt.Errorf("wireguard %d %s", index, err.Error())
+		}
 
 		for addressIndex, address := range wg.Addresses {
 			err := validateAddressWithCIDR(address)
@@ -234,6 +239,18 @@ func validateWireguard(cfg *api.SystemNetworkConfig) error {
 
 		if wg.Port < 0 || wg.Port > 65535 {
 			return fmt.Errorf("wireguard %d port %d out of range", index, wg.Port)
+		}
+
+		for routeIndex, route := range wg.Routes {
+			err := validateAddressWithCIDR(route.To)
+			if err != nil {
+				return fmt.Errorf("wireguard %d route %d 'To' %s", index, routeIndex, err.Error())
+			}
+
+			err = validateAddress(route.Via)
+			if err != nil {
+				return fmt.Errorf("wireguard %d route %d 'Via' %s", index, routeIndex, err.Error())
+			}
 		}
 
 		for peerIndex, peer := range wg.Peers {
