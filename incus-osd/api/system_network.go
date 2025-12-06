@@ -91,22 +91,25 @@ type SystemNetworkFirewallRule struct {
 
 // SystemNetworkVLAN contains information about a network vlan.
 type SystemNetworkWireguard struct {
-	Name              string               `json:"name"                          yaml:"name"`
-	PrivateKey        string               `json:"private_key"                   yaml:"private_key"`
-	Port              int                  `json:"port,omitempty"                yaml:"port,omitempty"`
-	MTU               int                  `json:"mtu,omitempty"                 yaml:"mtu,omitempty"`
-	Addresses         []string             `json:"addresses,omitempty"           yaml:"addresses,omitempty"`
-	RequiredForOnline string               `json:"required_for_online,omitempty" yaml:"required_for_online,omitempty"`
-	Peers             []WireguardPeer      `json:"peers,omitempty"               yaml:"peers,omitempty"`
+	Addresses         []string                     `json:"addresses,omitempty"           yaml:"addresses,omitempty"`
+	FirewallRules     []SystemNetworkFirewallRule  `json:"firewall_rules,omitempty"      yaml:"firewall_rules,omitempty"`
+	Name              string                       `json:"name"                          yaml:"name"`
+	MTU               int                          `json:"mtu,omitempty"                 yaml:"mtu,omitempty"`
+	Peers             []SystemNetworkWireguardPeer `json:"peers,omitempty"               yaml:"peers,omitempty"`
+	Port              int                          `json:"port,omitempty"                yaml:"port,omitempty"`
+	PrivateKey        string                       `json:"private_key,omitempty"         yaml:"private_key,omitempty"`
+	RequiredForOnline string                       `json:"required_for_online,omitempty" yaml:"required_for_online,omitempty"`
+	Roles             []string                     `json:"roles,omitempty"               yaml:"roles,omitempty"`
+	Routes            []SystemNetworkRoute         `json:"routes,omitempty"              yaml:"routes,omitempty"`
 }
 
 // SystemNetworkRoute defines a route.
-type WireguardPeer struct {
-	PublicKey           string               `json:"public_key"                     yaml:"public_key"`
-	PresharedKey        string               `json:"preshared_key,omitempty"        yaml:"preshared_key,omitempty"`
+type SystemNetworkWireguardPeer struct {
 	AllowedIPs          []string             `json:"allowed_ips"                    yaml:"allowed_ips"`
 	Endpoint            string               `json:"endpoint,omitempty"             yaml:"endpoint,omitempty"`
 	PersistentKeepalive int                  `json:"persistent_keepalive,omitempty" yaml:"persistent_keepalive,omitempty"`
+	PresharedKey        string               `json:"preshared_key,omitempty"        yaml:"preshared_key,omitempty"`
+	PublicKey           string               `json:"public_key"                     yaml:"public_key"`
 }
 // SystemNetworkRoute defines a route.
 type SystemNetworkRoute struct {
