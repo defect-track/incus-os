@@ -173,18 +173,20 @@ func (n *SystemNetworkState) GetInterfaceNamesByRole(role string) []string {
 
 // SystemNetworkInterfaceState holds state information about a specific network interface.
 type SystemNetworkInterfaceState struct {
-	Addresses []string                               `json:"addresses,omitempty" yaml:"addresses,omitempty"`
-	Hwaddr    string                                 `json:"hwaddr"              yaml:"hwaddr"`
-	LACP      *SystemNetworkLACPState                `json:"lacp,omitempty"      yaml:"lacp,omitempty"`
-	LLDP      []SystemNetworkLLDPState               `json:"lldp,omitempty"      yaml:"lldp,omitempty"`
-	Members   map[string]SystemNetworkInterfaceState `json:"members,omitempty"   yaml:"members,omitempty"`
-	MTU       int                                    `json:"mtu,omitempty"       yaml:"mtu,omitempty"`
-	Roles     []string                               `json:"roles,omitempty"     yaml:"roles,omitempty"`
-	Routes    []SystemNetworkRoute                   `json:"routes,omitempty"    yaml:"routes,omitempty"`
-	Speed     string                                 `json:"speed,omitempty"     yaml:"speed,omitempty"`
-	State     string                                 `json:"state"               yaml:"state"`
-	Stats     SystemNetworkInterfaceStats            `json:"stats"               yaml:"stats"`
-	Type      string                                 `json:"type,omitempty"      yaml:"type,omitempty"`
+	Addresses []string                               `json:"addresses,omitempty"  yaml:"addresses,omitempty"`
+	Hwaddr    string                                 `json:"hwaddr,omitempty"     yaml:"hwaddr,omitempty"`
+	LACP      *SystemNetworkLACPState                `json:"lacp,omitempty"       yaml:"lacp,omitempty"`
+	LLDP      []SystemNetworkLLDPState               `json:"lldp,omitempty"       yaml:"lldp,omitempty"`
+	Members   map[string]SystemNetworkInterfaceState `json:"members,omitempty"    yaml:"members,omitempty"`
+	MTU       int                                    `json:"mtu,omitempty"        yaml:"mtu,omitempty"`
+	Port      int                                    `json:"port,omitempty"                yaml:"port,omitempty"`
+	PublicKey string                                 `json:"public_key,omitempty" yaml:"public_key,omitempty"`
+	Roles     []string                               `json:"roles,omitempty"      yaml:"roles,omitempty"`
+	Routes    []SystemNetworkRoute                   `json:"routes,omitempty"     yaml:"routes,omitempty"`
+	Speed     string                                 `json:"speed,omitempty"      yaml:"speed,omitempty"`
+	State     string                                 `json:"state"                yaml:"state"`
+	Stats     SystemNetworkInterfaceStats            `json:"stats"                yaml:"stats"`
+	Type      string                                 `json:"type,omitempty"       yaml:"type,omitempty"`
 }
 
 // SystemNetworkInterfaceStats holds RX/TX stats for an interface.

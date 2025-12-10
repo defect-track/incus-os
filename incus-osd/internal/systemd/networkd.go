@@ -66,6 +66,12 @@ func ApplyNetworkConfiguration(ctx context.Context, s *state.State, networkCfg *
 	if err != nil {
 		return err
 	}
+	
+	// generate new private key for each wireguard if non it given 
+	err = manageWireguardPrivateKeys(ctx, networkCfg)
+	if err != nil {
+		return err
+	}
 
 	// Determine if any new physical devices (starting with "_p") will be added. Later
 	// after generating the new network configuration files we will need to wait until
@@ -423,21 +429,7 @@ func getWireguardState(ctx context.Context, ifaceType string, iface string, hwad
 	if len(interfaceStateRegex.FindStringSubmatch(output)) == 2 {
 		interfaceState = interfaceStateRegex.FindStringSubmatch(output)[1]
 	}
-/*
-	localMACRegex := regexp.MustCompile(`  Hardware Address: (.+)`)
 
-	localMAC := ""
-	if len(localMACRegex.FindStringSubmatch(output)) == 2 {
-		localMAC = strings.Fields(localMACRegex.FindStringSubmatch(output)[1])[0]
-	}
-
-	remoteMACRegex := regexp.MustCompile(`Permanent Hardware Address: (.+)`)
-
-	remoteMAC := ""
-	if len(remoteMACRegex.FindStringSubmatch(output)) == 2 {
-		remoteMAC = strings.Fields(remoteMACRegex.FindStringSubmatch(output)[1])[0]
-	}
-*/
 	mtuRegex := regexp.MustCompile(`MTU: (.+?) `)
 
 	mtu, err := strconv.Atoi(mtuRegex.FindStringSubmatch(output)[1])
@@ -473,29 +465,44 @@ func getWireguardState(ctx context.Context, ifaceType string, iface string, hwad
 		return api.SystemNetworkInterfaceState{}, err
 	}
 
-	var speed string
-/*
+	var publicKey string
+	var listeningPort int
+	
 	if interfaceState != "off" {
-		// #nosec G304
-		contents, err := os.ReadFile("/sys/class/net/" + iface + "/speed")
+		// Get various details from networkctl. It would be better to use the json output
+		// option, but that doesn't include everything we're interested in.
+		output, err = subprocess.RunCommandContext(ctx, "wg", "show", resolveBridge(iface))
 		if err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				return api.SystemNetworkInterfaceState{}, err
-			}
-
-			speed = "unknown"
-		} else {
-			speed = strings.TrimSuffix(string(contents), "\n")
+			return api.SystemNetworkInterfaceState{}, err
 		}
+		
+		sections := strings.Split(output, "\n\n")
+
+		publicKeyRegex := regexp.MustCompile(`  public key: (.+)`)
+	
+		content := publicKeyRegex.FindStringSubmatch(sections[0])[1]
+		if err != nil {
+			return api.SystemNetworkInterfaceState{}, err
+		}
+		publicKey = strings.TrimSuffix(string(content), "\n")
+		
+		listeningPortRegex := regexp.MustCompile(`  listening port: (.+)`)
+	
+		port, err := strconv.Atoi(listeningPortRegex.FindStringSubmatch(sections[0])[1])
+		if err != nil {
+			return api.SystemNetworkInterfaceState{}, err
+		}
+		listeningPort = port
 	}
-*/
+
 	return api.SystemNetworkInterfaceState{
 		Type:      ifaceType,
 		Addresses: ips,
-		Hwaddr:    "",
+		PublicKey: publicKey,
 		Routes:    routes,
 		MTU:       mtu,
-		Speed:     speed,
+		Port:      listeningPort,
+		Speed:     "unknown",
 		State:     interfaceState,
 		Stats: api.SystemNetworkInterfaceStats{
 			RXBytes:  rxBytes,
@@ -1176,7 +1183,7 @@ Id=%d
 		if w.Port != 0 {
 			listenPort = fmt.Sprintf("ListenPort=%d", w.Port)	
 		}
-
+		
 		cfgString := fmt.Sprintf(`[NetDev]
 Name=%s
 Kind=wireguard
@@ -1439,17 +1446,22 @@ UseMTU=true
 	}
 
 	// Create network for each Wireguard.
-	for _, w := range networkCfg.Wireguard {
+	for _, wg := range networkCfg.Wireguard {
 		cfgString := fmt.Sprintf(`[Match]
 Name=%s
 
 [Network]
-`, w.Name)
+`, wg.Name)
 
-		cfgString += processAddresses(w.Addresses)
+		cfgString += processAddresses(wg.Addresses)
+		
+		if len(wg.Routes) > 0 {
+			cfgString += processRoutes(wg.Routes)
+		}
+
 
 		ret = append(ret, networkdConfigFile{
-			Name:     fmt.Sprintf("23-%s.network", w.Name),
+			Name:     fmt.Sprintf("23-%s.network", wg.Name),
 			Contents: cfgString,
 		})
 	}
@@ -1837,4 +1849,20 @@ func mangleUSBNICs(config *api.SystemNetworkConfig) {
 			config.Interfaces[i].Name = strings.TrimPrefix(config.Interfaces[i].Name, "enx")
 		}
 	}
+}
+
+func manageWireguardPrivateKeys(ctx context.Context, networkCfg *api.SystemNetworkConfig) error {
+	// manage private key for each Wireguard.
+	for _, wg := range networkCfg.Wireguard {
+		// no private key given generate one as this is required for wiregurd
+		if wg.PrivateKey == "" {
+			output, err := subprocess.RunCommandContext(ctx, "wg", "genkey")
+			if err != nil {
+				return err
+			}
+			wg.PrivateKey = strings.TrimSuffix(string(output), "\n")
+		}
+	}
+
+	return nil
 }
